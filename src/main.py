@@ -10,7 +10,7 @@ import discord
 from aiohttp import ClientSession
 from discord.ext import commands
 
-from utils.database import DB
+from utils.database import PostgresqlDB
 from utils.config import Config
 
 # Add parent directory to path
@@ -31,7 +31,7 @@ class wangbot(commands.Bot):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.wangsysDB = DB(db_pool)
+        self.wangsysDB = PostgresqlDB(db_pool)
         self.web_client = web_client
         self.testing_guild_id = testing_guild_id
 
@@ -46,7 +46,7 @@ class wangbot(commands.Bot):
 
 
 async def main():
-    config = Config(parent_dir+"/config.ini")
+    config = Config(parent_dir + "/config.ini")
     # Logging
     logger = logging.getLogger("discord")
     logger.setLevel(logging.INFO)

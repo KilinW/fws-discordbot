@@ -10,7 +10,7 @@ import discord
 from aiohttp import ClientSession
 from discord.ext import commands
 
-from utils.database import PostgresqlDB
+from utils.database import FactoryDB
 from utils.config import Config
 
 # Add parent directory to path
@@ -21,7 +21,8 @@ sys.path.append(parent_dir)
 intents = discord.Intents.default()
 intents.message_content = True
 
-class wangbot(commands.Bot):
+
+class FactoryBot(commands.Bot):
     def __init__(
         self,
         *args,
@@ -31,7 +32,7 @@ class wangbot(commands.Bot):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.wangsysDB = PostgresqlDB(db_pool)
+        self.db = FactoryDB(db_pool)
         self.web_client = web_client
         self.testing_guild_id = testing_guild_id
 
@@ -42,6 +43,7 @@ class wangbot(commands.Bot):
                 await self.load_extension(f"cogs.{filename[:-3]}")
 
     async def on_ready(self):
+        await self.db._db_setup()
         print(f"We have logged in as {self.user}")
 
 
@@ -74,7 +76,7 @@ async def main():
         min_size=3,
         command_timeout=30,
     ) as pool:
-        async with wangbot(
+        async with FactoryBot(
             command_prefix=commands.when_mentioned_or("$"),
             intents=intents,
             db_pool=pool,

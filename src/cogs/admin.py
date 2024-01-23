@@ -44,16 +44,16 @@ class Admin(commands.Cog):
     ) -> None:
         synced = []
         if not guilds:
-            if spec == "~":
+            if spec == "~":             # This will sync all guild commands for the current context’s guild.
                 synced = await ctx.bot.tree.sync(guild=ctx.guild)
-            elif spec == "*":
+            elif spec == "*":           # This command copies all global commands to the current guild (within the CommandTree) and syncs.
                 ctx.bot.tree.copy_global_to(guild=ctx.guild)
                 synced = await ctx.bot.tree.sync(guild=ctx.guild)
-            elif spec == "^":
+            elif spec == "^":           # This command will remove all guild commands from the CommandTree and syncs, which effectively removes all commands from the guild.
                 ctx.bot.tree.clear_commands(guild=ctx.guild)
                 await ctx.bot.tree.sync(guild=ctx.guild)
-                synced = []
-            else:
+                synced = []             # This command will sync the 3 guild ids we passed: 123, 456 and 789. Only their guilds and guild-bound commands.
+            else:                       # Take all global commands and send them to Discord.
                 synced = await ctx.bot.tree.sync()
 
             await ctx.send(

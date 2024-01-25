@@ -32,7 +32,7 @@ class Chat(commands.GroupCog, name="chat"):
             msg = await interaction.followup.send("This command can only be used in a text channel.", ephemeral=True)
             return
         # Create a thread in that channel
-        thread = await channel.create_thread(name="New Chat", slowmode_delay=5)
+        thread = await channel.create_thread(name="New Chat", auto_archive_duration=10080, slowmode_delay=5)
         await thread.add_user(interaction.user)
         await self.chatstore.add_chat(thread)
 
@@ -78,6 +78,11 @@ class Chat(commands.GroupCog, name="chat"):
                 INSERT INTO factorybot.threads(user_id, thread_id, guild_id, created_at, deleted, owner)
                 VALUES ($1, $2, $3, $4, $5, $6)
             """, member.id, thread.id, thread.guild.id, thread.created_at, False, True)
-
-
-    
+            
+    @commands.Cog.listener()
+    async def on_raw_thread_update(self, payload: discord.RawThreadUpdateEvent):
+        if payload.data["owner_id"] != self.bot.user.id:    # type: ignore
+            return
+        # TODO: This function should deal with the problm when the thread is locked and also auto archive.
+        # We need to modifiy the last message of the thread to tell user to revive the thread using commands.
+        # Since emoji can't be used in thread a locked and archived thread.

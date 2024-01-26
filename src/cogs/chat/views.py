@@ -1,7 +1,7 @@
 from __future__ import annotations
 import asyncio
 from enum import Enum
-from typing import Dict, List, TYPE_CHECKING
+from typing import Dict, List, TYPE_CHECKING, Optional, Union
 
 import discord
 from discord import app_commands
@@ -28,11 +28,29 @@ class FeedbackType(Enum):
 
 class MainPanel(discord.ui.View):
     # This is the main panel for the chat cog.
-    pass
+    def __init__(self, db: ChatDB, interaction: discord.Interaction):
+        super().__init__()
+        self.db = db
+        self.user: Union[discord.Member, discord.User] = interaction.user
+    
+    @discord.ui.button(label="New Chat", style=discord.ButtonStyle.success, row=1)
+    async def new_chat(self, interaction: discord.Interaction, button: discord.ui.Button):
+        pass
+
+    @discord.ui.button(label="Profile", style=discord.ButtonStyle.primary, row=1)
+    async def profile(self, interaction: discord.Interaction, button: discord.ui.Button):
+        pass
+    
+    @discord.ui.button(label="My Chats", style=discord.ButtonStyle.secondary, row=1)
+    async def my_chats(self, interaction: discord.Interaction, button: discord.ui.Button):
+        pass
 
 
 class ProfilePanel(discord.ui.View):
     # Mange your profile.
+    pass
+
+class ChatPanel(discord.ui.View):
     pass
 
 
@@ -54,11 +72,19 @@ class Response(discord.ui.View):
         db: ChatDB,
     ):
         super().__init__()
+        self.timeout = 10
         self.db = db
         self.agent = agent
         self.msg_history = msg_history
-        self.response: List[str] = [response]
+        self.responses: List[str] = [response]
         self.cur_response = 0
+        self.msg: Optional[discord.Message] = None
+    
+    async def on_timeout(self) -> None:
+        for child in self.children:
+            child.disabled = True   # type: ignore
+        if self.msg is not None:
+            await self.msg.edit(view=self)
 
     @discord.ui.button(label="↺", style=discord.ButtonStyle.primary, row=1)
     async def regenerate(
@@ -67,15 +93,15 @@ class Response(discord.ui.View):
         response_dict = await self.agent.view_regenerate(
             self, self.msg_history, interaction.user
         )
-        self.response.append(response_dict["content"])
-        self.cur_response = len(self.response) - 1
-        self.page.label = f"{len(self.response)}/{len(self.response)}"
+        self.responses.append(response_dict["content"])
+        self.cur_response = len(self.responses) - 1
+        self.page.label = f"{len(self.responses)}/{len(self.responses)}"
         self.next.disabled = True
         self.previous.disabled = False
         await interaction.response.edit_message(**response_dict)
 
     @discord.ui.button(
-        label="🢀", style=discord.ButtonStyle.secondary, row=1, disabled=True
+        label="←", style=discord.ButtonStyle.secondary, row=1, disabled=True
     )
     async def previous(
         self, interaction: discord.Interaction, button: discord.ui.Button
@@ -84,9 +110,9 @@ class Response(discord.ui.View):
         if self.cur_response == 0:
             self.previous.disabled = True
         self.next.disabled = False
-        self.page.label = f"{self.cur_response + 1}/{len(self.response)}"
+        self.page.label = f"{self.cur_response + 1}/{len(self.responses)}"
         await interaction.response.edit_message(
-            content=self.response[self.cur_response], view=self
+            content=self.responses[self.cur_response], view=self
         )
 
     @discord.ui.button(
@@ -96,20 +122,20 @@ class Response(discord.ui.View):
         return
 
     @discord.ui.button(
-        label="🢂", style=discord.ButtonStyle.secondary, row=1, disabled=True
+        label="→", style=discord.ButtonStyle.secondary, row=1, disabled=True
     )
     async def next(self, interaction: discord.Interaction, button: discord.ui.Button):
-        self.cur_response = min(self.cur_response + 1, len(self.response) - 1)
-        if self.cur_response == len(self.response) - 1:
+        self.cur_response = min(self.cur_response + 1, len(self.responses) - 1)
+        if self.cur_response == len(self.responses) - 1:
             self.next.disabled = True
         self.previous.disabled = False
-        self.page.label = f"{self.cur_response + 1}/{len(self.response)}"
+        self.page.label = f"{self.cur_response + 1}/{len(self.responses)}"
         await interaction.response.edit_message(
-            content=self.response[self.cur_response]
+            content=self.responses[self.cur_response]
         )
 
     @discord.ui.button(label="Feedback", style=discord.ButtonStyle.success, row=1)
-    async def like(self, interaction: discord.Interaction, button: discord.ui.Button):
+    async def feedback(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.send_message(
             content="Thanks for your feedback! What do you think about this response?",
             view=Feedback(self.db, interaction.message),    # type: ignore

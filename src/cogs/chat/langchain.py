@@ -1,5 +1,5 @@
 import time
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, TypedDict
 
 import discord
 
@@ -7,12 +7,16 @@ from .views import Response
 from .profile import ChatProfile
 from .database import ChatDB
 
+class ResponseDict(TypedDict):
+    content: str
+    view: Response
+    
 
 class LangChainAgent:
     def __init__(self, db: ChatDB):
         self.db = db
 
-    async def generate(self, history: List[discord.Message]) -> Dict:
+    async def generate(self, history: List[discord.Message]) -> ResponseDict:
         completion = await self._completion(
             history, await self.db.profile(history[-1].author)
         )
@@ -34,6 +38,7 @@ class LangChainAgent:
     async def _completion(
         self, history: List[discord.Message], profile: ChatProfile
     ) -> str:
+        # TODO: Make sure when something went wrong, we still return a string that says something went wrong.
         return f"This is a mock reply for previous {len(history)} messages. Generated at {time.asctime()}    "
 
     async def title(self, question: discord.Message, answer: discord.Message) -> str:

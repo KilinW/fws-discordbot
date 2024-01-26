@@ -1,7 +1,8 @@
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 import asyncpg
 import discord
+import json
 import traceback
 
 
@@ -83,6 +84,131 @@ class ChatDB:
 
         return ChatProfile(result)
     
+    async def all_profiles(self, user: Union[discord.Member, discord.User]) -> List[ChatProfile]:
+        async with self.db.acquire() as connection:
+            result: asyncpg.Record = await connection.fetch(
+                """
+                SELECT * FROM factorybot.profiles
+                WHERE user_id = $1
+            """,
+                user.id,
+            )
+        if len(result) == 0:
+            return []
+        
+        return [ChatProfile(row) for row in result]
+    
+    async def find_profile(self, user: Union[discord.Member, discord.User], profile_name: str) -> Optional[ChatProfile]:
+        async with self.db.acquire() as connection:
+            result: asyncpg.Record = await connection.fetchrow(
+                """
+                SELECT * FROM factorybot.profiles
+                WHERE user_id = $1 AND name = $2
+            """,
+                user.id,
+                profile_name,
+            )
+
+        if result is None:
+            return None
+        
+        return ChatProfile(result)
+    
+    async def edit_profile(self, user: Union[discord.Member, discord.User], profile_buffer: ChatProfile) -> bool:
+        selected_profile = await self.find_profile(user, profile_buffer.name)
+        if selected_profile is None:
+            return False
+        
+        # Check if profile.params is valid JSON
+        try:
+            json.loads(profile_buffer.params)
+        except json.JSONDecodeError:
+            return False
+        
+        async with self.db.acquire() as connection:
+            await connection.execute(
+                """
+                UPDATE factorybot.profiles
+                SET description = $1, instruction = $2, model_name = $3, params = $4
+                WHERE user_id = $5 AND name = $6
+            """,
+                profile_buffer.description,
+                profile_buffer.instruction,
+                profile_buffer.model_name,
+                profile_buffer.params,
+                user.id,
+                profile_buffer.name,
+            )
+        
+        return True
+    
+    async def add_profile(self, user: Union[discord.Member, discord.User], profile_buffer: ChatProfile) -> bool:
+        selected_profile = await self.find_profile(user, profile_buffer.name)
+        if selected_profile is not None:
+            return False
+        
+        # Check if profile.params is valid JSON
+        try:
+            json.loads(profile_buffer.params)
+        except json.JSONDecodeError:
+            return False
+        
+        async with self.db.acquire() as connection:
+            await connection.execute(
+                """
+                INSERT INTO factorybot.profiles (user_id, name, selected, description, instruction, model_name, params)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+            """,
+                user.id,
+                profile_buffer.name,
+                False,
+                profile_buffer.description,
+                profile_buffer.instruction,
+                profile_buffer.model_name,
+                profile_buffer.params,
+            )
+        
+        return True
+    
+    async def delete_profile(self, user: Union[discord.Member, discord.User], profile_name: str) -> bool:
+        async with self.db.acquire() as connection:
+            # Be aware of non-existing profile
+            await connection.execute(
+                """
+                DELETE FROM factorybot.profiles
+                WHERE user_id = $1 AND name = $2
+            """,
+                user.id,
+                profile_name,
+            )
+        
+        return True
+    
+    async def select_profile(self, user: Union[discord.Member, discord.User], profile_name: str) -> bool:
+        selected_profile = await self.find_profile(user, profile_name)
+        if selected_profile is None:
+            return False
+
+        async with self.db.acquire() as connection:
+            await connection.execute(
+                """
+                UPDATE factorybot.profiles
+                SET selected = False
+                WHERE user_id = $1
+            """,
+                user.id,
+            )
+            await connection.execute(
+                """
+                UPDATE factorybot.profiles
+                SET selected = True
+                WHERE user_id = $1 AND name = $2
+            """,
+                user.id,
+                profile_name,
+            )
+            return True
+    
     async def feedback(self, user: Union[discord.Member, discord.User], message: discord.Message, opinion: str, type: int) -> None:
         async with self.db.acquire() as connection:
             await connection.execute(
@@ -153,7 +279,7 @@ class ChatDB:
                     selected boolean,
                     description character varying(100),
                     instruction character varying(5000),
-                    model_id integer,
+                    model_name character varying(100),
                     params json,
                     PRIMARY KEY (user_id, name)
                 );
@@ -201,3 +327,21 @@ class ChatDB:
             """
             )
             print("Table 'feedback' checked/created in schema 'factorybot'.")
+            
+        # Check if the admins tables exist in the schema. If not, create them.
+        async with self.db.acquire() as connection:
+            # Create the table
+            await connection.execute(
+                """
+                CREATE TABLE factorybot.admins
+                (
+                    user_id bigint,
+                    feedback boolean,
+                    PRIMARY KEY (user_id)
+                );
+
+                ALTER TABLE IF EXISTS factorybot.admins
+                    OWNER to chilling;
+            """
+            )
+            print("Table 'admin' checked/created in schema 'factorybot'.")

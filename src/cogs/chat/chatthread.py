@@ -13,6 +13,7 @@ import asyncpg
 from .langchain import LangChainAgent
 from .database import ChatDB
 from .profile import ChatProfile
+from .views import Response
 
 if TYPE_CHECKING:
     from main import FactoryBot
@@ -45,14 +46,22 @@ class ChatThread:
         self._refresh_timeout()
         if self.msg_history[-1].id != message.id:
             self.msg_history.append(message)
-
+        
+        # Lock the thread to prevent user input before completion.
+        await self.thread.edit(locked=True)
+        
         # Get the response from the agent.
         response_dict = await self.agent.generate(self.msg_history)
-
+        
         # Send the response to the thread.
-        response_msg = await self.thread.send(**response_dict)
+        response_msg = await self.thread.send(content=response_dict["content"], view=response_dict["view"])
+        
+        view = response_dict["view"]
+        view.msg = response_msg
+        
         # Function to
         await self.valid_thread_init(message, response_msg)
+        await self.thread.edit(locked=False)
 
     async def valid_thread_init(
         self, message: discord.Message, response_msg: discord.Message

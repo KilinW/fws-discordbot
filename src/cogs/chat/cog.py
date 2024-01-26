@@ -9,34 +9,19 @@ import asyncpg
 
 from .chatthread import ChatThreadStore
 from .database import ChatDB
+from .group import UserGroup
 
 if TYPE_CHECKING:
     from main import FactoryBot
 
 @app_commands.guild_only()
-class Chat(commands.GroupCog, name="chat"):
+class Chat(commands.Cog):
     def __init__(self, bot: FactoryBot, db: Optional[asyncpg.Pool] = None):
         self.bot = bot
         self.description = '''A cog for chat commands.'''
         self.db = ChatDB(bot.db) if db is None else ChatDB(db)
         self.chatstore = ChatThreadStore(self.db)
-
-    @app_commands.command(name="new")
-    async def new_chat(self, interaction: discord.Interaction) -> None:
-        # Create a thread for that interaction.
-        await interaction.response.defer(ephemeral=True, thinking=True)
-
-        # Get the channel of the interaction.
-        channel = interaction.channel
-        if not isinstance(channel, discord.TextChannel):
-            msg = await interaction.followup.send("This command can only be used in a text channel.", ephemeral=True)
-            return
-        # Create a thread in that channel
-        thread = await channel.create_thread(name="New Chat", auto_archive_duration=10080, slowmode_delay=5)
-        await thread.add_user(interaction.user)
-        await self.chatstore.add_chat(thread)
-
-        await interaction.followup.send(f"Created a new chat thread: {thread.mention}", ephemeral=True)
+        self.bot.tree.add_command(UserGroup(self.db, self.chatstore))
 
     @commands.Cog.listener()
     async def on_message(self, message: discord.Message):

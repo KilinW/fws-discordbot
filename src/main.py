@@ -6,6 +6,7 @@ import sys
 from typing import Optional
 import configparser
 
+from dotenv import load_dotenv
 import asyncpg
 import discord
 from aiohttp import ClientSession
@@ -45,6 +46,7 @@ class FactoryBot(commands.Bot):
 
 
 async def main():
+    load_dotenv()
     config = configparser.ConfigParser()
     config.read(parent_dir + "/config.ini")
     # Logging
@@ -66,11 +68,11 @@ async def main():
 
     # Bot
     async with ClientSession() as web_client, asyncpg.create_pool(
-        user=config["POSTGRESQL"]["user"],
-        password=config["POSTGRESQL"]["password"],
-        host=config["POSTGRESQL"]["host"],
-        port=config["POSTGRESQL"]["port"],
-        database=config["POSTGRESQL"]["database"],
+        user=os.environ.get("POSTGRES_USER"),
+        password=os.environ.get("POSTGRES_PASSWORD"),
+        host=os.environ.get("POSTGRES_HOST"),
+        port=os.environ.get("POSTGRES_PORT"),
+        database=os.environ.get("POSTGRES_DATABASE"),
         min_size=3,
         command_timeout=30,
     ) as pool:
@@ -80,7 +82,10 @@ async def main():
             db_pool=pool,
             web_client=web_client,
         ) as bot:
-            await bot.start(config["BOT"]["token"])
+            token = os.environ.get("DISCORD_BOT_TOKEN")
+            if token is None:
+                raise ValueError("DISCORD_BOT_TOKEN is not set in environment variables.")
+            await bot.start(token)
 
 
 asyncio.run(main())

@@ -49,6 +49,18 @@ class ChatDB:
             )
 
         return [row[0] for row in result]
+    
+    async def all_thread(self, member: Union[discord.Member, discord.User]) -> List[discord.Thread]:
+        async with self.db.acquire() as connection:
+            result = await connection.fetch(
+                """
+                SELECT * FROM factorybot.threads
+                WHERE user_id = $1
+            """,
+                member.id,
+            )
+        
+        return [row[1] for row in result]
 
     async def log_thread(
         self, thread: discord.Thread, member: Union[discord.Member, discord.User]
@@ -185,6 +197,9 @@ class ChatDB:
         return True
     
     async def select_profile(self, user: Union[discord.Member, discord.User], profile_name: str) -> bool:
+        if profile_name == "Default Profile":
+            await self.deselect_profile(user)
+            return True
         selected_profile = await self.find_profile(user, profile_name)
         if selected_profile is None:
             return False
@@ -208,6 +223,42 @@ class ChatDB:
                 profile_name,
             )
             return True
+        
+    async def deselect_profile(self, user: Union[discord.Member, discord.User]) -> bool:
+        async with self.db.acquire() as connection:
+            await connection.execute(
+                """
+                UPDATE factorybot.profiles
+                SET selected = False
+                WHERE user_id = $1
+            """,
+                user.id,
+            )
+            return True
+        
+    async def all_files(self) -> List[str]:
+        async with self.db.acquire() as connection:
+            result = await connection.fetch(
+                """
+                SELECT * FROM factorybot.files
+            """
+            )
+        
+        return [row[0] for row in result]
+    
+    async def add_file(self, name: str, url: str) -> bool:
+        async with self.db.acquire() as connection:
+            await connection.execute(
+                """
+                INSERT INTO factorybot.files (name, url)
+                VALUES ($1, $2)
+                ON CONFLICT (name) DO NOTHING
+            """,
+                name,
+                url,
+            )
+        
+        return True
     
     async def feedback(self, user: Union[discord.Member, discord.User], message: discord.Message, opinion: str, type: int) -> None:
         async with self.db.acquire() as connection:
@@ -313,7 +364,7 @@ class ChatDB:
             # Create the table
             await connection.execute(
                 """
-                CREATE TABLE factorybot.feedback
+                CREATE TABLE IF NOT EXISTS factorybot.feedback
                 (
                     user_id bigint,
                     message_id bigint,
@@ -333,7 +384,7 @@ class ChatDB:
             # Create the table
             await connection.execute(
                 """
-                CREATE TABLE factorybot.admins
+                CREATE TABLE IF NOT EXISTS factorybot.admins
                 (
                     user_id bigint,
                     feedback boolean,
@@ -345,3 +396,20 @@ class ChatDB:
             """
             )
             print("Table 'admin' checked/created in schema 'factorybot'.")
+            
+        async with self.db.acquire() as connection:
+            # Create the table
+            await connection.execute(
+                """
+                CREATE TABLE IF NOT EXISTS factorybot.files
+                (
+                    name character varying(100),
+                    url character varying(500),
+                    PRIMARY KEY (name)
+                );
+
+                ALTER TABLE IF EXISTS factorybot.files
+                    OWNER to chilling;
+            """
+            )
+            print("Table 'files' checked/created in schema 'factorybot'.")

@@ -19,7 +19,16 @@ class ChatProfile:
         self.user_id = None
         self.name = "Default Profile"
         self.selected = True
-        self.description = "Default Profile"
-        self.instruction = "Default Profile"
-        self.model_name = "default"
-        self.params = '{}'
+        self.description = ""
+        self.instruction = "你是一個廠務知識的聊天機器人，你擅長並只能根據提供的文件回答答案，以下是我想問的問題以及對應的文件，還有過往的對話紀錄。請告訴我解決方案。"
+        self.model_name = "gpt-3.5-turbo"
+        self.params = {
+            "langchain_params": {
+                "chunk_size": 300,
+                "chunk_overlap": 150
+            },
+            "model_params": {
+                "temperature": 0.5,
+                "max_length": 100
+            }
+        }

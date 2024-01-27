@@ -1,16 +1,19 @@
 from __future__ import annotations
 import asyncio
 from enum import Enum
-from typing import Dict, List, TYPE_CHECKING, Optional, Union
+from typing import Any, Dict, List, TYPE_CHECKING, Optional, Tuple, Union
 
 import discord
 from discord import app_commands
 from discord.ext import commands
+from discord.interactions import Interaction
 
 from .database import ChatDB
 
 if TYPE_CHECKING:
     from .langchain import LangChainAgent
+    from .chatthread import ChatThread
+    from .chatthread import ChatThreadStore
 
 
 class FeedbackType(Enum):
@@ -46,13 +49,30 @@ class MainPanel(discord.ui.View):
         pass
 
 
-class ProfilePanel(discord.ui.View):
-    # Mange your profile.
-    pass
-
 class ChatPanel(discord.ui.View):
-    pass
+    def __init__(self, db: ChatDB, chatstore: ChatThreadStore):
+        super().__init__()
+        self.db = db
+        self.chatstore = chatstore
 
+    @discord.ui.button(label="New Chat", style=discord.ButtonStyle.success, row=1)
+    async def new_chat(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Create a thread for that interaction.
+        await interaction.response.defer(ephemeral=True, thinking=True)
+
+        # Get the channel of the interaction.
+        channel = interaction.channel
+        if not isinstance(channel, discord.TextChannel):
+            msg = await interaction.followup.send("This command can only be used in a text channel.", ephemeral=True)
+            return
+        # Create a thread in that channel
+        thread = await channel.create_thread(name="New Chat", auto_archive_duration=10080, slowmode_delay=5)
+        await thread.add_user(interaction.user)
+        await self.chatstore.add_chat(thread)
+
+        await interaction.followup.send(f"Created a new chat thread: {thread.mention}", ephemeral=True)
+        
+    # A Button that 
 
 class FastQuestion(discord.ui.View):
     # This is the view for a fast question.
@@ -60,6 +80,79 @@ class FastQuestion(discord.ui.View):
     # Then we should open a thread for this question.
     pass
 
+class FileSelect(discord.ui.Select["ThreadWelcome"]):
+    def __init__(self, files: List[Tuple[str, bool]]):
+        options = [discord.SelectOption(label=name, value=name, default=selected) for name, selected in files]
+        super().__init__(
+            placeholder="Select a files to use in the chat",
+            min_values=0,
+            max_values=len(options),
+            options=options,
+            row=0,
+        )
+        
+    async def callback(self, interaction: Interaction):
+        assert self.view is not None
+        view: ThreadWelcome = self.view
+        for option in self.options:
+            if option.value in self.values:
+                view.thread.files[option.value] = True
+                option.default = True
+            else:
+                view.thread.files[option.value] = False
+                option.default = False
+
+        Embed = discord.Embed(title=f"Select files to use in the chat", color=discord.colour.Color.green())
+        for i, page in enumerate(view.pages):
+            if len(page.values) == 0:
+                continue
+            Embed.add_field(name=f"Page {i+1}", value="\n".join([f"{name}" for name in page.values]))
+        await interaction.response.edit_message(view=view, embed=Embed)
+
+class FilePageSelect(discord.ui.Select["ThreadWelcome"]):
+    def __init__(self, pages: int):
+        options = [discord.SelectOption(label=f"Page {i+1}", value=str(i)) for i in range(pages)]
+        super().__init__(
+            placeholder="Page 1",
+            min_values=0,
+            max_values=1,
+            options=options,
+            row=1,
+        )
+    
+    async def callback(self, interaction: Interaction):
+        assert self.view is not None
+        self.view.to_page(int(self.values[0]))
+        self.placeholder = f"Page {int(self.values[0])+1}"
+        await interaction.response.edit_message(view=self.view)
+
+class ThreadWelcome(discord.ui.View):
+    def __init__(
+        self,
+        thread: ChatThread,
+        db: ChatDB,
+    ):
+        super().__init__()
+        self.timeout = 3600
+        self.thread = thread
+        self.db = db
+        file_pages = len(self.thread.files)//25
+        files = list(self.thread.files.items())
+        if len(files) == 0:
+            self.add_item(discord.ui.Button(label="No files available", style=discord.ButtonStyle.secondary, row=0, disabled=True))
+            return
+        self.pages = [FileSelect(files[i*25:(i+1)*25]) for i in range(file_pages)]
+        if len(self.thread.files) % 25 != 0:
+            self.pages.append(FileSelect(files[file_pages*25:]))
+        self.page_select = FilePageSelect(len(self.pages))
+        self.add_item(self.pages[0])
+        self.add_item(self.page_select)
+    
+    def to_page(self, page: int):
+        self.clear_items()
+        self.add_item(self.pages[page])
+        self.add_item(self.page_select)
+        
 
 class Response(discord.ui.View):
     # This is the view for a response.
@@ -72,7 +165,7 @@ class Response(discord.ui.View):
         db: ChatDB,
     ):
         super().__init__()
-        self.timeout = 10
+        self.timeout = 3600
         self.db = db
         self.agent = agent
         self.msg_history = msg_history
@@ -90,6 +183,7 @@ class Response(discord.ui.View):
     async def regenerate(
         self, interaction: discord.Interaction, button: discord.ui.Button
     ):
+        await interaction.response.edit_message(content="Regenerating...")
         response_dict = await self.agent.view_regenerate(
             self, self.msg_history, interaction.user
         )
@@ -98,7 +192,7 @@ class Response(discord.ui.View):
         self.page.label = f"{len(self.responses)}/{len(self.responses)}"
         self.next.disabled = True
         self.previous.disabled = False
-        await interaction.response.edit_message(**response_dict)
+        await interaction.edit_original_response(**response_dict)
 
     @discord.ui.button(
         label="←", style=discord.ButtonStyle.secondary, row=1, disabled=True
@@ -131,7 +225,7 @@ class Response(discord.ui.View):
         self.previous.disabled = False
         self.page.label = f"{self.cur_response + 1}/{len(self.responses)}"
         await interaction.response.edit_message(
-            content=self.responses[self.cur_response]
+            content=self.responses[self.cur_response], view=self
         )
 
     @discord.ui.button(label="Feedback", style=discord.ButtonStyle.success, row=1)

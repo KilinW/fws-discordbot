@@ -4,19 +4,19 @@ import logging.handlers
 import os
 import sys
 from typing import Optional
+import configparser
 
+from dotenv import load_dotenv
 import asyncpg
 import discord
 from aiohttp import ClientSession
 from discord.ext import commands
 
-from utils.database import FactoryDB
-from utils.config import Config
+from cogs import EXTENSIONS
 
 # Add parent directory to path
 current_dir = os.path.dirname(os.path.realpath(__file__))
 parent_dir = os.path.dirname(current_dir)
-sys.path.append(parent_dir)
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -32,29 +32,29 @@ class FactoryBot(commands.Bot):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        self.db = FactoryDB(db_pool)
+        self.db = db_pool
         self.web_client = web_client
         self.testing_guild_id = testing_guild_id
 
     async def setup_hook(self):
         # Load cogs
-        for filename in os.listdir(current_dir + "/cogs"):
-            if filename.endswith(".py"):
-                await self.load_extension(f"cogs.{filename[:-3]}")
+        for extension in EXTENSIONS:
+            await self.load_extension(extension)
 
     async def on_ready(self):
-        await self.db._db_setup()
         print(f"We have logged in as {self.user}")
 
 
 async def main():
-    config = Config(parent_dir + "/config.ini")
+    load_dotenv()
+    config = configparser.ConfigParser()
+    config.read(parent_dir + "/config.ini")
     # Logging
     logger = logging.getLogger("discord")
     logger.setLevel(logging.INFO)
 
     handler = logging.handlers.RotatingFileHandler(
-        filename="discord.log",
+        filename=parent_dir + "discord.log",
         encoding="utf-8",
         maxBytes=32 * 1024 * 1024,  # 32 MiB
         backupCount=5,  # Rotate through 5 files
@@ -68,11 +68,11 @@ async def main():
 
     # Bot
     async with ClientSession() as web_client, asyncpg.create_pool(
-        user=config.postgresql_user(),
-        password=config.postgresql_password(),
-        host=config.postgresql_host(),
-        port=config.postgresql_port(),
-        database=config.postgresql_database(),
+        user=os.environ.get("POSTGRES_USER"),
+        password=os.environ.get("POSTGRES_PASSWORD"),
+        host=os.environ.get("POSTGRES_HOST"),
+        port=os.environ.get("POSTGRES_PORT"),
+        database=os.environ.get("POSTGRES_DATABASE"),
         min_size=3,
         command_timeout=30,
     ) as pool:
@@ -82,7 +82,10 @@ async def main():
             db_pool=pool,
             web_client=web_client,
         ) as bot:
-            await bot.start(config.bot_token())
+            token = os.environ.get("DISCORD_BOT_TOKEN")
+            if token is None:
+                raise ValueError("DISCORD_BOT_TOKEN is not set in environment variables.")
+            await bot.start(token)
 
 
 asyncio.run(main())

@@ -1,4 +1,5 @@
 from typing import List, Optional, Union
+import os
 
 import asyncpg
 import discord
@@ -299,7 +300,7 @@ class ChatDB:
         async with self.db.acquire() as connection:
             # Create the table
             await connection.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS factorybot.threads (
                     user_id bigint NOT NULL,
                     thread_id bigint NOT NULL,
@@ -312,7 +313,7 @@ class ChatDB:
                 );
 
                 ALTER TABLE factorybot.threads
-                OWNER TO chilling;
+                OWNER TO {os.environ.get("POSTGRES_USER")};
             """
             )
             print("Table 'threads' checked/created in schema 'factorybot'.")
@@ -322,7 +323,7 @@ class ChatDB:
         async with self.db.acquire() as connection:
             # Create the table
             await connection.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS factorybot.profiles
                 (
                     user_id bigint,
@@ -336,7 +337,7 @@ class ChatDB:
                 );
 
                 ALTER TABLE IF EXISTS factorybot.profiles
-                    OWNER to chilling;
+                    OWNER to {os.environ.get("POSTGRES_USER")};
             """
             )
             print("Table 'profiles' checked/created in schema 'factorybot'.")
@@ -345,7 +346,7 @@ class ChatDB:
         async with self.db.acquire() as connection:
             # Create the table
             await connection.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS factorybot.server
                 (
                     guild_id bigint,
@@ -354,7 +355,7 @@ class ChatDB:
                 );
 
                 ALTER TABLE IF EXISTS factorybot.server
-                    OWNER to chilling;
+                    OWNER to {os.environ.get("POSTGRES_USER")};
             """
             )
             print("Table 'server_info' checked/created in schema 'factorybot'.")
@@ -363,7 +364,7 @@ class ChatDB:
         async with self.db.acquire() as connection:
             # Create the table
             await connection.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS factorybot.feedback
                 (
                     user_id bigint,
@@ -374,7 +375,7 @@ class ChatDB:
                 );
 
                 ALTER TABLE IF EXISTS factorybot.feedback
-                    OWNER to chilling;
+                    OWNER to {os.environ.get("POSTGRES_USER")};
             """
             )
             print("Table 'feedback' checked/created in schema 'factorybot'.")
@@ -383,7 +384,7 @@ class ChatDB:
         async with self.db.acquire() as connection:
             # Create the table
             await connection.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS factorybot.admins
                 (
                     user_id bigint,
@@ -392,7 +393,7 @@ class ChatDB:
                 );
 
                 ALTER TABLE IF EXISTS factorybot.admins
-                    OWNER to chilling;
+                    OWNER to {os.environ.get("POSTGRES_USER")};
             """
             )
             print("Table 'admin' checked/created in schema 'factorybot'.")
@@ -400,7 +401,7 @@ class ChatDB:
         async with self.db.acquire() as connection:
             # Create the table
             await connection.execute(
-                """
+                f"""
                 CREATE TABLE IF NOT EXISTS factorybot.files
                 (
                     name character varying(100),
@@ -409,7 +410,7 @@ class ChatDB:
                 );
 
                 ALTER TABLE IF EXISTS factorybot.files
-                    OWNER to chilling;
+                    OWNER to {os.environ.get("POSTGRES_USER")};
             """
             )
             print("Table 'files' checked/created in schema 'factorybot'.")
